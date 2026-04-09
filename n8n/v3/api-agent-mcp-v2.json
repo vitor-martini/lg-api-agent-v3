@@ -1,0 +1,105 @@
+{
+  "name": "api-agent-mcp-v2",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "bearerAuth",
+        "path": "0d5e3319-b928-4c9a-aa6d-de075a0847dc"
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -128
+      ],
+      "id": "cb3a528d-95df-450c-a14c-113adb0831a2",
+      "name": "MCP Server Trigger",
+      "webhookId": "0d5e3319-b928-4c9a-aa6d-de075a0847dc",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "imoAujIQHMfLLDYx",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Consulta a documentação das APIs SOAP da LG lugar de gente e responde perguntas sobre operações disponíveis, parâmetros de entrada e saída, e tipos de dados.\n",
+        "workflowId": {
+          "__rl": true,
+          "value": "D9tTjme3oqQBvcsB",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/D9tTjme3oqQBvcsB",
+          "cachedResultName": "api-agent-core-v2"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "question": "=={{ $fromAI('question', 'A pergunta do usuário sobre as APIs SOAP da LG lugar de gente', 'string') }}",
+            "session_id": "=={{ $fromAI('session_id', 'ID da sessão do usuário', 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "question",
+              "displayName": "question",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "session_id",
+              "displayName": "session_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        16,
+        80
+      ],
+      "id": "f4fed682-83a0-4731-9291-87d14e577118",
+      "name": "consultar_api_lg"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "consultar_api_lg": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "4654f8eb-a254-41b6-928d-2d0e5581e3c4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1dbe9a30b520b7eda59138ef936901ac77a70b0c14e3bdec8ed98ce8cea5d062"
+  },
+  "id": "y4qpulnH0isjyEoH",
+  "tags": []
+}

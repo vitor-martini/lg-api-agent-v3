@@ -1,0 +1,114 @@
+{
+  "name": "buscar-wsdl",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"api_id\": \"ServicoDeColaborador_v2\",\n  \"catalogo_mapa\": \"string\"\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "70e13f94-38c7-45bb-9696-88e5558aea82",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst apiId = (item.api_id || item.input || '').trim();\n\nif (!apiId) {\n  return [{\n    json: {\n      erro: `Nenhum api_id recebido. Campos: ${JSON.stringify(Object.keys(item))}. IDs válidos: não disponível.`\n    }\n  }];\n}\n\n// Lê o catálogo que veio como parâmetro do workflow pai\nlet catalogo = {};\ntry {\n  catalogo = JSON.parse(item.catalogo_mapa);\n} catch (e) {\n  return [{\n    json: {\n      erro: `Erro ao ler catalogo_mapa: ${e.message}. Valor recebido: ${item.catalogo_mapa}`\n    }\n  }];\n}\n\nconst url = catalogo[apiId];\n\nif (!url) {\n  return [{\n    json: {\n      erro: `api_id \"${apiId}\" não encontrado. IDs válidos: ${Object.keys(catalogo).join(\", \")}`\n    }\n  }];\n}\n\nreturn [{ json: { url, api_id: apiId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "e3907618-da8b-451b-8058-54f90f90c5e7",
+      "name": "Resolver URL"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "074798fc-bea7-4a7f-aa93-b70aa5035374",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Parser WSDL v2 — Extração completa com herança e hierarquia\n// Recebe o XML bruto do HTTP Request e o api_id do nó anterior\n// ============================================================\n\nconst rawData = $input.first().json.data || $input.first().json.body || '';\nconst apiId = $('Resolver URL').first().json.api_id || 'desconhecido';\n\nif (!rawData || typeof rawData !== 'string' || rawData.trim().length === 0) {\n  return [{\n    json: {\n      api_id: apiId,\n      conteudo: `Erro: Não foi possível obter o conteúdo WSDL para \"${apiId}\".`\n    }\n  }];\n}\n\nconst xml = rawData.trim();\n\n// ── Helpers ──\n\nfunction stripNs(val) {\n  if (!val) return '';\n  return val.includes(':') ? val.split(':').pop() : val;\n}\n\nfunction getAttr(tag, attr) {\n  const m = tag.match(new RegExp(`${attr}\\\\s*=\\\\s*[\"']([^\"']*)[\"']`, 'i'));\n  return m ? m[1] : null;\n}\n\n// ── 1. Extrair TODOS os complexType nomeados (com herança) ──\n\nconst namedTypes = {};\n\n// Regex que pega <complexType name=\"...\">...</complexType> (com ou sem namespace)\nconst ctRegex = /<[\\w:]*complexType\\s+[^>]*?name\\s*=\\s*[\"']([^\"']*)[\"'][^>]*?>([\\s\\S]*?)<\\/[\\w:]*complexType>/gi;\nlet ctMatch;\nwhile ((ctMatch = ctRegex.exec(xml)) !== null) {\n  const typeName = ctMatch[1];\n  const body = ctMatch[2];\n  \n  // Detectar herança: <extension base=\"...\">\n  const extMatch = body.match(/extension\\s+base\\s*=\\s*[\"']([^\"']*)[\"']/i);\n  const baseType = extMatch ? stripNs(extMatch[1]) : null;\n  \n  // Extrair elementos filhos diretos\n  const campos = [];\n  const elRegex = /<[\\w:]*element\\s+[^>]*?name\\s*=\\s*[\"']([^\"']*)[\"'][^>]*?\\/?>/gi;\n  let elMatch;\n  while ((elMatch = elRegex.exec(body)) !== null) {\n    const nome = elMatch[1];\n    const tag = elMatch[0];\n    const tipo = getAttr(tag, 'type');\n    const nillable = getAttr(tag, 'nillable') === 'true';\n    const minOccurs = getAttr(tag, 'minOccurs');\n    const maxOccurs = getAttr(tag, 'maxOccurs');\n    \n    const tipoLimpo = tipo ? stripNs(tipo) : 'any';\n    const obrigatorio = minOccurs !== '0';\n    const lista = maxOccurs === 'unbounded';\n    \n    campos.push({ nome, tipo: tipoLimpo, obrigatorio, nillable, lista });\n  }\n  \n  namedTypes[typeName] = { baseType, campos };\n}\n\n// ── 2. Extrair elementos raiz (operações de request/response) com inline types ──\n\nconst rootElements = {};\nconst rootElRegex = /<[\\w:]*element\\s+[^>]*?name\\s*=\\s*[\"']([^\"']*)[\"'][^>]*?>([\\s\\S]*?)<\\/[\\w:]*element>/gi;\nlet rootMatch;\nwhile ((rootMatch = rootElRegex.exec(xml)) !== null) {\n  const elName = rootMatch[1];\n  const body = rootMatch[2];\n  \n  // Só pegar elementos raiz que contêm complexType inline (são os wrappers de operação)\n  if (!body.match(/complexType/i)) continue;\n  \n  const campos = [];\n  const innerElRegex = /<[\\w:]*element\\s+[^>]*?name\\s*=\\s*[\"']([^\"']*)[\"'][^>]*?\\/?>/gi;\n  let innerMatch;\n  while ((innerMatch = innerElRegex.exec(body)) !== null) {\n    const nome = innerMatch[1];\n    const tag = innerMatch[0];\n    const tipo = getAttr(tag, 'type');\n    const minOccurs = getAttr(tag, 'minOccurs');\n    const nillable = getAttr(tag, 'nillable') === 'true';\n    \n    campos.push({\n      nome,\n      tipo: tipo ? stripNs(tipo) : 'any',\n      obrigatorio: minOccurs !== '0',\n      nillable\n    });\n  }\n  \n  if (campos.length > 0) {\n    rootElements[elName] = campos;\n  }\n}\n\n// ── 3. Resolver herança recursivamente ──\n\nfunction resolveFields(typeName, visited) {\n  if (!typeName || !namedTypes[typeName]) return [];\n  if (!visited) visited = new Set();\n  if (visited.has(typeName)) return []; // evitar loop\n  visited.add(typeName);\n  \n  const t = namedTypes[typeName];\n  const inherited = t.baseType ? resolveFields(t.baseType, visited) : [];\n  return [...inherited, ...t.campos];\n}\n\n// ── 4. Expandir tipo completo com profundidade (até 3 níveis) ──\n\nfunction expandType(typeName, depth, visited) {\n  if (depth > 8) return '(ver detalhes do tipo ' + typeName + ')';\n  if (!visited) visited = new Set();\n  if (visited.has(typeName)) return '(referência circular a ' + typeName + ')';\n  visited.add(typeName);\n  \n  const allFields = resolveFields(typeName, new Set());\n  if (allFields.length === 0) return '(sem campos)';\n  \n  const indent = '    '.repeat(depth);\n  let result = '';\n  \n  for (const f of allFields) {\n    const obrig = f.obrigatorio ? ' [OBRIGATÓRIO]' : ' [opcional]';\n    const lista = f.lista ? ' [LISTA]' : '';\n    \n    // Verificar se o tipo é primitivo\n    const primitivos = ['string', 'int', 'long', 'boolean', 'dateTime', 'decimal', 'double', 'float', 'short', 'byte', 'any', 'anyType'];\n    const isPrimitivo = primitivos.includes(f.tipo);\n    \n    result += `${indent}- ${f.nome}: ${f.tipo}${obrig}${lista}\\n`;\n    \n    // Se não é primitivo e existe como tipo nomeado, expandir\n    if (!isPrimitivo && namedTypes[f.tipo]) {\n      result += expandType(f.tipo, depth + 1, new Set(visited));\n    }\n  }\n  \n  return result;\n}\n\n// ── 5. Extrair operações do portType ──\n\nconst operations = [];\nconst ptBlocks = xml.match(/<[\\w:]*portType[\\s\\S]*?<\\/[\\w:]*portType>/gi) || [];\nfor (const pt of ptBlocks) {\n  const opRegex = /<[\\w:]*operation\\s+[^>]*?name\\s*=\\s*[\"']([^\"']*)[\"']/gi;\n  let opMatch;\n  while ((opMatch = opRegex.exec(pt)) !== null) {\n    operations.push(opMatch[1]);\n  }\n}\n\n// ── 6. Extrair mensagens (para headers e faults) ──\n\nconst messages = {};\nconst msgRegex = /<[\\w:]*message\\s+[^>]*?name\\s*=\\s*[\"']([^\"']*)[\"'][^>]*?>([\\s\\S]*?)<\\/[\\w:]*message>/gi;\nlet msgMatch;\nwhile ((msgMatch = msgRegex.exec(xml)) !== null) {\n  const msgName = msgMatch[1];\n  const body = msgMatch[2];\n  const parts = [];\n  const partRegex = /<[\\w:]*part\\s+[^>]*?name\\s*=\\s*[\"']([^\"']*)[\"'][^>]*?(?:element|type)\\s*=\\s*[\"']([^\"']*)[\"'][^>]*?\\/?>/gi;\n  let pMatch;\n  while ((pMatch = partRegex.exec(body)) !== null) {\n    parts.push({ nome: pMatch[1], tipo: stripNs(pMatch[2]) });\n  }\n  messages[msgName] = parts;\n}\n\n// ── 7. Extrair soapAction do binding ──\n\nconst soapActions = {};\nconst bindOpRegex = /<[\\w:]*operation\\s+[^>]*?name\\s*=\\s*[\"']([^\"']*?)[\"'][^>]*?>[\\s\\S]*?soapAction\\s*=\\s*[\"']([^\"']*)[\"']/gi;\nlet bindMatch;\nwhile ((bindMatch = bindOpRegex.exec(xml)) !== null) {\n  soapActions[bindMatch[1]] = bindMatch[2];\n}\n\n// ── 8. Extrair endpoint ──\n\nconst endpointMatch = xml.match(/address\\s+location\\s*=\\s*[\"']([^\"']*)[\"']/i);\nconst endpoint = endpointMatch ? endpointMatch[1] : 'não encontrado';\n\n// ── 9. Extrair simpleTypes / enums ──\n\nconst simpleTypes = [];\nconst stRegex = /<[\\w:]*simpleType\\s+[^>]*?name\\s*=\\s*[\"']([^\"']*)[\"'][^>]*?>([\\s\\S]*?)<\\/[\\w:]*simpleType>/gi;\nlet stMatch;\nwhile ((stMatch = stRegex.exec(xml)) !== null) {\n  const stName = stMatch[1];\n  const body = stMatch[2];\n  const enumVals = [];\n  const enumRegex = /value\\s*=\\s*[\"']([^\"']*)[\"']/gi;\n  let eMatch;\n  while ((eMatch = enumRegex.exec(body)) !== null) {\n    enumVals.push(eMatch[1]);\n  }\n  if (enumVals.length > 0) {\n    simpleTypes.push({ nome: stName, valores: enumVals });\n  }\n}\n\n// ── 10. Montar output ──\n\nlet out = `=== API: ${apiId} ===\\n`;\nout += `Endpoint: ${endpoint}\\n\\n`;\n\nout += `OPERAÇÕES (${operations.length}):\\n`;\nout += `${'─'.repeat(50)}\\n\\n`;\n\nfor (const op of operations) {\n  out += `▶ ${op}\\n`;\n  \n  // SoapAction\n  if (soapActions[op]) {\n    out += `  SOAPAction: ${soapActions[op]}\\n`;\n  }\n  \n  // Headers\n  const headerMsg = messages[`ServicoDeReintegracao_${op}_InputMessage_Headers`] || \n                    Object.entries(messages).find(([k]) => k.includes(op) && k.includes('Headers'))?.[1];\n  if (headerMsg && headerMsg.length > 0) {\n    out += `  Headers SOAP obrigatórios:\\n`;\n    for (const h of headerMsg) {\n      out += `    - ${h.nome} (${h.tipo})\\n`;\n      if (namedTypes[h.tipo]) {\n        out += expandType(h.tipo, 3, new Set());\n      }\n    }\n  }\n  \n  // Input (elemento raiz + expansão)\n  const inputEl = rootElements[op];\n  out += `\\n  ENTRADA (request body):\\n`;\n  out += `  Elemento raiz: <${op}>\\n`;\n  if (inputEl) {\n    for (const campo of inputEl) {\n      out += `    - ${campo.nome}: ${campo.tipo}${campo.obrigatorio ? ' [OBRIGATÓRIO]' : ' [opcional]'}\\n`;\n      if (namedTypes[campo.tipo]) {\n        out += expandType(campo.tipo, 3, new Set());\n      }\n    }\n  } else {\n    out += `    (sem parâmetros diretos)\\n`;\n  }\n  \n  // Output (elemento raiz Response + expansão)\n  const outputEl = rootElements[op + 'Response'];\n  out += `\\n  SAÍDA (response body):\\n`;\n  out += `  Elemento raiz: <${op}Response>\\n`;\n  if (outputEl) {\n    for (const campo of outputEl) {\n      out += `    - ${campo.nome}: ${campo.tipo}${campo.obrigatorio ? ' [OBRIGATÓRIO]' : ' [opcional]'}\\n`;\n      if (namedTypes[campo.tipo]) {\n        out += expandType(campo.tipo, 3, new Set());\n      }\n    }\n  } else {\n    out += `    (sem campos de retorno detalhados)\\n`;\n  }\n  \n  // Faults\n  const faultKeys = Object.keys(messages).filter(k => k.includes(op) && k.includes('Fault'));\n  if (faultKeys.length > 0) {\n    out += `\\n  ERROS POSSÍVEIS (faults):\\n`;\n    for (const fk of faultKeys) {\n      const faultName = fk.split('_').pop().replace('Message', '');\n      out += `    - ${faultName}:\\n`;\n      for (const p of messages[fk]) {\n        out += `      ${p.nome} (${p.tipo})\\n`;\n        if (namedTypes[p.tipo]) {\n          const fields = resolveFields(p.tipo, new Set());\n          for (const f of fields) {\n            out += `        - ${f.nome}: ${f.tipo}\\n`;\n          }\n        }\n      }\n    }\n  }\n  \n  out += `\\n${'─'.repeat(50)}\\n\\n`;\n}\n\n// Tipos simples / enums\nif (simpleTypes.length > 0) {\n  out += `ENUMS / TIPOS SIMPLES:\\n`;\n  for (const st of simpleTypes) {\n    out += `  ◇ ${st.nome}: ${st.valores.join(', ')}\\n`;\n  }\n  out += '\\n';\n}\n\nreturn [{\n  json: {\n    api_id: apiId,\n    conteudo: out\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "1bca32ef-27ee-456a-8394-1c6f742796fe",
+      "name": "Parser WSDL"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "api_id": "ServicoDeColaborador_v2"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Resolver URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolver URL": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Parser WSDL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "cfcbfc78-6789-4c38-a927-602ea4a858cd",
+  "meta": {
+    "instanceId": "1dbe9a30b520b7eda59138ef936901ac77a70b0c14e3bdec8ed98ce8cea5d062"
+  },
+  "id": "iQ16EeIfT7ynwSKW",
+  "tags": []
+}
