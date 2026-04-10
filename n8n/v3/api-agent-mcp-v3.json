@@ -1,10 +1,10 @@
 {
-  "name": "api-agent-mcp-v2",
+  "name": "api-agent-mcp-v3",
   "nodes": [
     {
       "parameters": {
         "authentication": "bearerAuth",
-        "path": "0d5e3319-b928-4c9a-aa6d-de075a0847dc"
+        "path": "3ce285a5-1329-4449-8c07-2473666f685c"
       },
       "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
       "typeVersion": 2,
@@ -12,9 +12,9 @@
         -80,
         -128
       ],
-      "id": "cb3a528d-95df-450c-a14c-113adb0831a2",
+      "id": "d70fe499-68c2-4b7c-9b82-ede25ac73647",
       "name": "MCP Server Trigger",
-      "webhookId": "0d5e3319-b928-4c9a-aa6d-de075a0847dc",
+      "webhookId": "3ce285a5-1329-4449-8c07-2473666f685c",
       "credentials": {
         "httpBearerAuth": {
           "id": "imoAujIQHMfLLDYx",
@@ -27,10 +27,10 @@
         "description": "Consulta a documentação das APIs SOAP da LG lugar de gente e responde perguntas sobre operações disponíveis, parâmetros de entrada e saída, e tipos de dados.\n",
         "workflowId": {
           "__rl": true,
-          "value": "D9tTjme3oqQBvcsB",
+          "value": "F8F8arZbkXnXca0R",
           "mode": "list",
-          "cachedResultUrl": "/workflow/D9tTjme3oqQBvcsB",
-          "cachedResultName": "api-agent-core-v2"
+          "cachedResultUrl": "/workflow/F8F8arZbkXnXca0R",
+          "cachedResultName": "api-agent-core-v3"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -71,7 +71,7 @@
         16,
         80
       ],
-      "id": "f4fed682-83a0-4731-9291-87d14e577118",
+      "id": "de20d378-6765-4e98-b07f-f17fed8fe6f6",
       "name": "consultar_api_lg"
     }
   ],
@@ -95,11 +95,11 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "4654f8eb-a254-41b6-928d-2d0e5581e3c4",
+  "versionId": "0d361426-7a34-4d1c-9f42-c9bbbbef8057",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "1dbe9a30b520b7eda59138ef936901ac77a70b0c14e3bdec8ed98ce8cea5d062"
   },
-  "id": "y4qpulnH0isjyEoH",
+  "id": "wlMVdywFCcgoXs99",
   "tags": []
 }
