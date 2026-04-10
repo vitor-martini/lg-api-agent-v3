@@ -1,11 +1,11 @@
 {
   "manifest_version": "1.0",
   "name": "Especialista em APIs da gen.te",
-  "description": "Agente de IA que interpreta documentação WSDL/XML das APIs SOAP da LG lugar de gente e responde perguntas em linguagem natural sobre operações, parâmetros, tipos de dados e como consumir cada serviço.",
-  "version": "2.0.0",
+  "description": "Agente de IA que responde perguntas em linguagem natural sobre as APIs SOAP da suíte gen.te da LG lugar de gente — operações, parâmetros, exemplos XML, autenticação e troubleshooting.",
+  "version": "3.0.0",
   "protocol": "MCP",
   "transport": "streamable-http",
-  "endpoint": "https://n8n-production-8b74b.up.railway.app/mcp/0d5e3319-b928-4c9a-aa6d-de075a0847dc",
+  "endpoint": "https://n8n-production-8b74b.up.railway.app/mcp/3ce285a5-1329-4449-8c07-2473666f685c",
   "authentication": {
     "type": "bearer",
     "description": "Token Bearer enviado no header Authorization"
@@ -13,17 +13,17 @@
   "tools": [
     {
       "name": "consultar_api_lg",
-      "description": "Consulta a documentação das APIs SOAP da LG lugar de gente e responde perguntas sobre operações disponíveis, parâmetros de entrada e saída, e tipos de dados.",
+      "description": "Consulta a documentação das APIs SOAP da suíte gen.te e responde perguntas sobre operações, parâmetros, body/response XML, autenticação, permissões e troubleshooting.",
       "input_schema": {
         "type": "object",
         "properties": {
           "question": {
             "type": "string",
-            "description": "A pergunta do usuário sobre as APIs SOAP da LG lugar de gente. Exemplos: 'Quais operações existem no Serviço de Colaborador v2?', 'Como consumir o método SalvarLista do ServicoDeReintegracao?', 'Quais parâmetros de entrada do método ConsultarListaParaVariosContratos?'"
+            "description": "Pergunta em linguagem natural sobre as APIs SOAP da gen.te. Exemplos: 'Quais métodos existem no Serviço de Colaborador?', 'Como montar o body XML do SalvarLista?', 'O que é o GuidTenant?', 'Estou recebendo acesso negado, o que fazer?'"
           },
           "session_id": {
             "type": "string",
-            "description": "ID da sessão do usuário. Utilizado para manter contexto entre perguntas consecutivas."
+            "description": "Identificador da sessão do usuário para manter contexto entre perguntas consecutivas."
           }
         },
         "required": ["question"]
@@ -33,40 +33,54 @@
         "properties": {
           "response": {
             "type": "string",
-            "description": "Resposta em linguagem natural contendo informações técnicas sobre a API consultada, incluindo operações, parâmetros com tipos e obrigatoriedade, estrutura de request/response, SOAPAction, endpoint e possíveis erros (faults)."
+            "description": "Resposta formatada contendo informações técnicas sobre a API consultada. Pode incluir tabela de parâmetros, exemplos de request/response XML, schema resumido, orientações de autenticação ou diagnóstico de erros, conforme o tipo de pergunta."
           }
         },
         "required": ["response"]
       }
     }
   ],
+  "fontes_de_conhecimento": [
+    {
+      "tool_interna": "buscar_metodo",
+      "fonte": "Google Sheets — Planilha de métodos SOAP",
+      "conteudo": "Dados técnicos: nome do serviço, método, descrição, parâmetros obrigatórios/opcionais, body XML e response XML.",
+      "quando_usada": "Perguntas sobre operações, campos, parâmetros, body XML, response ou schema."
+    },
+    {
+      "tool_interna": "buscar_documentacao",
+      "fonte": "Google Sheets — Planilha de documentação (chave-valor)",
+      "conteudo": "Orientações sobre autenticação, credenciais, GuidTenant, Ambiente, permissões, header SOAP e troubleshooting.",
+      "quando_usada": "Perguntas sobre autenticação, configuração, erros de acesso ou conceitos da plataforma."
+    }
+  ],
   "arquitetura": {
-    "orquestrador": "n8n 2.12.3 (self-hosted no Railway)",
-    "modelo_ia": "OpenAI GPT-4.1-nano",
-    "estrategia": "O agente recebe um catálogo leve das APIs e busca a documentação WSDL sob demanda via tool calling. Apenas a WSDL relevante para a pergunta é consultada, otimizando o consumo de tokens.",
+    "orquestrador": "n8n (self-hosted no Railway)",
+    "modelo_ia": "OpenAI GPT",
+    "memoria": "Simple Memory com contexto de sessão",
+    "estrategia": "O agente classifica cada pergunta e roteia para a tool correta (buscar_metodo ou buscar_documentacao). Em casos ambíguos, consulta ambas.",
     "workflows": {
-      "api-agent-core-v2": "Núcleo do agente. Catálogo centralizado, AI Agent com tool calling, memória de sessão.",
-      "buscar-wsdl": "Tool que resolve URL, faz HTTP GET na WSDL, parseia XML com herança de tipos e retorna documentação estruturada.",
-      "api-agent-mcp-v2": "MCP Server Trigger com autenticação Bearer. Expõe a tool consultar_api_lg via protocolo MCP.",
-      "api-agent-webhook-v2": "Webhook POST para o front-end web independente."
+      "api-agent-core-v3": "Núcleo do agente com AI Agent, duas tools de Google Sheets e memória.",
+      "api-agent-webhook-v3": "Webhook POST para o front-end web.",
+      "api-agent-mcp-v3": "MCP Server Trigger com Bearer Auth expondo a tool consultar_api_lg."
     }
   },
   "como_integrar": {
-    "passo_1": "Configure um MCP client apontando para o endpoint informado acima",
-    "passo_2": "Adicione o header Authorization com o Bearer token fornecido",
+    "passo_1": "Configure um MCP client apontando para o endpoint",
+    "passo_2": "Adicione o header Authorization com o Bearer token",
     "passo_3": "O client descobrirá automaticamente a tool consultar_api_lg via tools/list",
     "passo_4": "Chame a tool passando question (obrigatório) e session_id (opcional)",
-    "passo_5": "A resposta virá no campo response com a análise técnica da API consultada"
+    "passo_5": "A resposta virá no campo response"
   },
   "como_testar": {
-    "mcp_inspector": "Acesse https://mcp.ziziyi.com/inspector, selecione Streamable HTTP, cole o endpoint, adicione o header Authorization com Bearer token, conecte e execute a tool.",
-    "front_end": "Acesse https://vitor-martini.github.io/lg-api-agent/ para testar via interface web.",
-    "webhook": "Envie POST para https://n8n-production-8b74b.up.railway.app/webhook/1a6ea1e4-b775-42db-8b96-01a37e564475 com body { \"question\": \"...\", \"session_id\": \"...\" }"
+    "front_end": "https://vitor-martini.github.io/lg-api-agent-v3",
+    "mcp_inspector": "https://mcp.ziziyi.com/inspector — Streamable HTTP, cole o endpoint, adicione Bearer token, conecte (https://n8n-production-8b74b.up.railway.app/mcp/3ce285a5-1329-4449-8c07-2473666f685c) e execute.",
+    "webhook": "POST https://n8n-production-8b74b.up.railway.app/webhook/f015c49f-cb0e-4537-a2df-035e10644084 com body {\"question\": \"...\", \"session_id\": \"...\"}"
   },
   "seguranca": {
-    "dados": "Apenas documentação pública (WSDLs) é consultada. Nenhum dado real de produção, clientes ou colaboradores é utilizado.",
+    "dados": "Apenas documentação técnica e dados fictícios. Nenhum dado real de produção.",
     "autenticacao": "Endpoint MCP protegido por Bearer Token.",
-    "desacoplamento": "Solução 100% autônoma, sem dependência de outros sistemas ou equipes."
+    "desacoplamento": "Solução 100% autônoma, sem dependência de outros sistemas."
   },
   "time": ["Alex Pereira", "Marcos Gonzaga", "Vitor Martini"],
   "hackathon": "Desafio Plug & Play Agents — Hackathon IA 2026 — LG lugar de gente"
